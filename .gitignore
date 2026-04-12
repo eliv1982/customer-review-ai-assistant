@@ -1,0 +1,25 @@
+# Environment and secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+
+# Local database files
+*.db
+*.sqlite3
+
+# Сгенерированные отчёты и выгрузки (каталог exports/ в репозитории остаётся)
+exports/*
+!exports/.gitkeep
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
