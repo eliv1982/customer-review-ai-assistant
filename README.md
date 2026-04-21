@@ -88,6 +88,7 @@ Pipeline проекта:
 │   └── knowledge_base.csv    # база знаний (шаблоны для оператора)
 ├── samples/
 │   └── sample_reviews.csv    # демо-данные для импорта
+├── tests/                    # pytest: SQLite, CSV, KB (без Telegram и OpenAI)
 └── docs/                     # документация для сдачи и GitHub-портфолио
     ├── assistant_prompt_for_docs.md   # роль ассистента, промпт, ограничения, сводная таблица сценариев
     ├── scenarios_for_docs.md          # сценарии с примерами отзывов и интерпретацией
@@ -117,6 +118,20 @@ Pipeline проекта:
    ```bash
    pip install -r requirements.txt
    ```
+
+---
+
+## Тесты (pytest)
+
+Автоматические проверки основных сценариев (SQLite, дедупликация, импорт CSV, база знаний) **без** Telegram и **без** вызова OpenAI.
+
+Из корня проекта (с активированным venv):
+
+```bash
+pytest
+```
+
+Корень репозитория подключается к импорту модулей через `pytest.ini` (`pythonpath`).
 
 ---
 
