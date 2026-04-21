@@ -22,6 +22,30 @@ from services.review_service import REVIEW_DISPLAY_NAME_UNSPECIFIED
 # Источники с префиксом не попадают в пользовательский отчёт Telegram (/report).
 TELEGRAM_REPORT_EXCLUDE_SOURCE_PREFIXES: Final[tuple[str, ...]] = ("smoke_",)
 
+# Для фразы о преобладании тональности (существительное + прилагательное в составе).
+_SENTIMENT_DOMINANT_RU: Final[dict[str, str]] = {
+    "positive": "позитивные отзывы",
+    "negative": "негативные отзывы",
+    "mixed": "смешанные отзывы",
+    "neutral": "нейтральные отзывы",
+}
+
+
+def _reviews_count_phrase_ru(n: int) -> str:
+    """«N отзыв/отзыва/отзывов» для подписей в отчёте."""
+    n_abs = abs(int(n))
+    n10 = n_abs % 10
+    n100 = n_abs % 100
+    if 11 <= n100 <= 19:
+        word = "отзывов"
+    elif n10 == 1:
+        word = "отзыв"
+    elif 2 <= n10 <= 4:
+        word = "отзыва"
+    else:
+        word = "отзывов"
+    return f"{n_abs} {word}"
+
 
 def _connect(database_path: str) -> sqlite3.Connection:
     path = Path(database_path)
@@ -283,10 +307,65 @@ def build_analytics_snapshot(
     )
 
 
+def _executive_summary_ru(snapshot: ReviewAnalyticsSnapshot, *, compact: bool) -> str | None:
+    """
+    Короткий итог по снимку: лидирующая тема, лидер среди negative/mixed, общий тон.
+    Без обращения к БД и внешним API.
+    """
+    if snapshot.total_reviews == 0:
+        return None
+
+    parts: list[str] = []
+
+    if snapshot.by_topic:
+        t, n = snapshot.by_topic[0]
+        parts.append(f"чаще всего тема «{topic_label_ru(t)}» ({n})")
+
+    if snapshot.top_problem_topics:
+        t, n = snapshot.top_problem_topics[0]
+        parts.append(
+            f"среди негативных и смешанных чаще всего «{topic_label_ru(t)}» ({n})"
+        )
+
+    if snapshot.by_sentiment:
+        items = sorted(snapshot.by_sentiment, key=lambda x: (-x[1], x[0]))
+        total_s = sum(n for _, n in items)
+        if total_s > 0:
+            top_code, top_n = items[0]
+            second_n = items[1][1] if len(items) > 1 else 0
+            dom_label = _SENTIMENT_DOMINANT_RU.get(
+                top_code, sentiment_label_ru(top_code)
+            )
+            share = top_n / total_s
+            # Явный лидер или заметный отрыв от второго места
+            if share >= 0.45 or (top_n > second_n and (top_n - second_n) >= max(2, total_s * 0.12)):
+                parts.append(f"преобладают {dom_label} ({top_n} из {total_s})")
+            elif share >= 0.32:
+                parts.append(f"по тональности лидируют {dom_label} ({top_n} из {total_s})")
+            else:
+                parts.append("тональность без явного лидера — отзывы распределены по категориям")
+
+    if not parts:
+        return None
+
+    body = "; ".join(parts)
+    if body:
+        body = body[0].upper() + body[1:] if len(body) > 1 else body.upper()
+    if not body.endswith("."):
+        body += "."
+    if compact:
+        return f"Кратко: {body}"
+    return f"Кратко\n{body}"
+
+
 def format_report_ru(snapshot: ReviewAnalyticsSnapshot, *, compact: bool = False) -> str:
     """Краткий текстовый отчёт на русском по уже посчитанным агрегатам."""
     gap = "\n" if compact else "\n\n"
     lines: list[str] = ["Сводка по отзывам", f"Всего: {snapshot.total_reviews}"]
+
+    summary = _executive_summary_ru(snapshot, compact=compact)
+    if summary:
+        lines.append(f"{gap}{summary}")
 
     lines.append(f"{gap}{'По этапам:' if compact else 'По этапам обработки:'}")
     if snapshot.by_status:
@@ -327,14 +406,14 @@ def format_report_ru(snapshot: ReviewAnalyticsSnapshot, *, compact: bool = False
     else:
         lines.append("• (пока нет таких отзывов)")
 
-    lines.append(f"{gap}По товарам:")
+    prod_title = "Товары (топ):" if compact else "Товары (топ по числу отзывов):"
+    lines.append(f"{gap}{prod_title}")
     if snapshot.by_product:
         for p in snapshot.by_product:
             ar = f"{p.avg_rating:.2f}" if p.avg_rating is not None else rating_display_ru(None)
-            lines.append(f"• {p.product_label}: {p.review_count} отз., ср. {ar}")
+            rc = _reviews_count_phrase_ru(p.review_count)
+            lines.append(f"• {p.product_label} — {rc}, ср. балл {ar}")
     else:
-        lines.append(
-            "• (нет строк с названием товара)" if compact else "• (нет отзывов)"
-        )
+        lines.append("• (нет отзывов с указанным названием товара)")
 
     return "\n".join(lines)

@@ -135,7 +135,14 @@ def main() -> None:
         return
 
     log.info("Запуск Telegram-бота (aiogram, long polling).")
-    asyncio.run(run_bot_polling(settings))
+    try:
+        asyncio.run(run_bot_polling(settings))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        log.info("Telegram-бот остановлен")
+    else:
+        log.info("Telegram-бот завершил работу")
+    finally:
+        log.info("Приложение завершено корректно")
 
 
 if __name__ == "__main__":

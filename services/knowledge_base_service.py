@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Sequence
@@ -132,6 +133,21 @@ def _row_key(r: KnowledgeBaseRow) -> tuple[str, str, str]:
     return (r.topic, r.common_phrase, r.sentiment)
 
 
+def _common_phrase_order_prefix(phrase: str) -> int:
+    """
+    Если в начале common_phrase задан порядок «01.» / «02)» (как в CSV),
+    используем его при сортировке вместо произвольной лексикографики.
+    """
+    s = (phrase or "").strip()
+    m = re.match(r"^(\d{1,2})[.)]\s*", s)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            pass
+    return 999
+
+
 def find_matches_for_analysis(
     rows: Sequence[KnowledgeBaseRow],
     analysis: StructuredReviewAnalysis,
@@ -142,7 +158,7 @@ def find_matches_for_analysis(
     Подбор по результату анализа ИИ.
 
     Приоритет:
-    1. Совпадение ``topic`` + ``sentiment`` (ранжирование по ``review_type``).
+    1. Совпадение ``topic`` + ``sentiment`` (ранжирование по ``review_type`` и префиксу ``01.``/``02.`` в ``common_phrase``, если задан).
     2. Если не хватает до ``limit`` — добор по той же ``topic``, без полярного конфликта
        с тональностью анализа (не смешиваем negative с positive-шаблонами и наоборот).
 
@@ -160,7 +176,12 @@ def find_matches_for_analysis(
 
     tier1 = [r for r in rows if r.topic == topic and r.sentiment == sent]
     tier1.sort(
-        key=lambda r: (-_review_type_bonus(r, hint_rt), r.review_type, r.common_phrase),
+        key=lambda r: (
+            -_review_type_bonus(r, hint_rt),
+            r.review_type,
+            _common_phrase_order_prefix(r.common_phrase),
+            r.common_phrase,
+        ),
     )
     for r in tier1:
         if len(out) >= limit:
@@ -183,6 +204,7 @@ def find_matches_for_analysis(
                 -_tier2_sentiment_rank(sent, r.sentiment),
                 -_review_type_bonus(r, hint_rt),
                 r.review_type,
+                _common_phrase_order_prefix(r.common_phrase),
                 r.common_phrase,
             ),
         )
@@ -197,7 +219,14 @@ def find_matches_for_analysis(
     if not out:
         # Резерв: только тональность по всем темам (без полярного конфликта).
         fallback = [r for r in rows if r.sentiment == sent and not _polar_clash(sent, r.sentiment)]
-        fallback.sort(key=lambda r: (r.topic != "other", r.review_type, r.common_phrase))
+        fallback.sort(
+            key=lambda r: (
+                r.topic != "other",
+                r.review_type,
+                _common_phrase_order_prefix(r.common_phrase),
+                r.common_phrase,
+            ),
+        )
         for r in fallback:
             if len(out) >= limit:
                 break

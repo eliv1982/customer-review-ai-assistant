@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, Router
@@ -29,6 +30,9 @@ async def run_bot_polling(settings: Settings) -> None:
     logger.info("Telegram-бот: запуск long polling (Ctrl+C для остановки)")
     try:
         await dp.start_polling(bot)
+    except asyncio.CancelledError:
+        # Штатная остановка polling при завершении приложения.
+        logger.info("Telegram-бот остановлен")
     finally:
         await bot.session.close()
         logger.info("Telegram-бот: polling остановлен")
