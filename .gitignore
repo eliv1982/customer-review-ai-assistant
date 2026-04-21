@@ -14,10 +14,6 @@ env/
 *.db
 *.sqlite3
 
-# Сгенерированные отчёты и выгрузки (каталог exports/ в репозитории остаётся)
-exports/*
-!exports/.gitkeep
-
 # IDE / OS
 .idea/
 .vscode/
