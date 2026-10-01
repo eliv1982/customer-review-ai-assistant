@@ -16,6 +16,11 @@ from prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
+# Интерактивный Telegram-бот: ответ нужен за секунды, а не за дефолтные 10 минут SDK.
+# Таймаут действует на каждую попытку; число повторов — значение по умолчанию SDK, заданное явно.
+OPENAI_TIMEOUT_SECONDS: Final[float] = 30.0
+OPENAI_MAX_RETRIES: Final[int] = 2
+
 Sentiment = Literal["positive", "neutral", "negative", "mixed"]
 Topic = Literal[
     "delivery",
@@ -146,7 +151,11 @@ def analyze_review(
     if not text:
         raise AnalysisError("Пустой текст отзыва")
 
-    client = OpenAI(api_key=api_key.strip())
+    client = OpenAI(
+        api_key=api_key.strip(),
+        timeout=OPENAI_TIMEOUT_SECONDS,
+        max_retries=OPENAI_MAX_RETRIES,
+    )
     schema = _review_analysis_json_schema()
     response_format: dict[str, Any] = {
         "type": "json_schema",

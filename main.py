@@ -11,6 +11,7 @@ import logging
 import os
 import pprint
 import sys
+import tempfile
 from pathlib import Path
 
 from bot.runner import run_bot_polling
@@ -41,8 +42,8 @@ def configure_logging(level_name: str) -> None:
     )
 
 
-def _run_smoke_tests() -> None:
-    """Локальные проверки CSV, отчёта, KB и pipeline (без Telegram)."""
+def _run_smoke_checks(db_path: str) -> None:
+    """Локальные проверки CSV, отчёта, KB и pipeline (без Telegram) на базе ``db_path``."""
     from services.ai_service import StructuredReviewAnalysis
     from services.csv_service import import_reviews_from_csv
     from services.knowledge_base_service import find_matches_for_analysis, load_knowledge_base
@@ -55,7 +56,6 @@ def _run_smoke_tests() -> None:
     from services.review_pipeline import process_review
 
     settings = get_settings()
-    db_path = settings.database_path
     sample_csv = Path(__file__).resolve().parent / "samples" / "sample_reviews.csv"
     process_ai = bool(settings.openai_api_key and str(settings.openai_api_key).strip())
 
@@ -108,6 +108,18 @@ def _run_smoke_tests() -> None:
         print("--- SMOKE: process_review ---")
         print(pr.status, pr.review_id, len(pr.kb_matches))
         print("--- конец SMOKE pipeline ---\n")
+
+
+def _run_smoke_tests() -> None:
+    """
+    Smoke на изолированной временной БД: демо-данные не попадают в основную базу
+    (``DATABASE_PATH``) и не влияют на ``/report``. Временный каталог удаляется по завершении.
+    """
+    with tempfile.TemporaryDirectory(prefix="review_smoke_") as tmp_dir:
+        smoke_db_path = str(Path(tmp_dir) / "smoke.db")
+        init_database(smoke_db_path)
+        print("\n--- SMOKE: временная БД (основная база не затрагивается) ---")
+        _run_smoke_checks(smoke_db_path)
 
 
 def main() -> None:
