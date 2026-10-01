@@ -153,8 +153,6 @@ def main() -> None:
         log.info("Telegram-бот остановлен")
     else:
         log.info("Telegram-бот завершил работу")
-    finally:
-        log.info("Приложение завершено корректно")
 
 
 if __name__ == "__main__":
