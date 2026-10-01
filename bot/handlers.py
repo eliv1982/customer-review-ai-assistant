@@ -5,9 +5,10 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import weakref
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -150,20 +151,48 @@ def setup_handlers(router: Router, settings: Settings) -> None:
     # анализ, не нашла бы дубликат и создала бы вторую запись и второй вызов OpenAI.
     # Запись в словаре живёт, пока блокировку кто-то держит или ждёт.
     review_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+    allowed_ids = settings.allowed_telegram_ids
+
+    def guarded(
+        handler: Callable[[Message], Awaitable[None]],
+    ) -> Callable[[Message], Awaitable[None]]:
+        """
+        Деплой-ограничение доступа (``ALLOWED_TELEGRAM_IDS``): чужой пользователь получает отказ
+        до любых обращений к OpenAI и БД. Пустой список — ограничения нет, хендлер вызывается как есть.
+        Сообщение без отправителя при включённом ограничении тоже отклоняется.
+        """
+
+        @functools.wraps(handler)
+        async def wrapper(message: Message) -> None:
+            if allowed_ids:
+                user = message.from_user
+                if user is None or user.id not in allowed_ids:
+                    logger.warning(
+                        "Telegram: доступ запрещён user_id=%s", user.id if user else None
+                    )
+                    await message.answer(msg.ACCESS_DENIED)
+                    return
+            await handler(message)
+
+        return wrapper
 
     @router.message(CommandStart())
+    @guarded
     async def cmd_start(message: Message) -> None:
         await message.answer(msg.START_TEXT)
 
     @router.message(Command("help"))
+    @guarded
     async def cmd_help(message: Message) -> None:
         await message.answer(msg.HELP_TEXT)
 
     @router.message(Command("new_review"))
+    @guarded
     async def cmd_new_review(message: Message) -> None:
         await message.answer(msg.NEW_REVIEW_PROMPT)
 
     @router.message(Command("report"))
+    @guarded
     async def cmd_report(message: Message) -> None:
         try:
             report = await asyncio.to_thread(_build_report_text, db_path)
@@ -175,6 +204,7 @@ def setup_handlers(router: Router, settings: Settings) -> None:
             await message.answer(part)
 
     @router.message(F.text)
+    @guarded
     async def on_review_text(message: Message) -> None:
         raw = (message.text or "").strip()
         if not raw:

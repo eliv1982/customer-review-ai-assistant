@@ -56,13 +56,32 @@ def _connect(database_path: str) -> sqlite3.Connection:
     return conn
 
 
+# Символ экранирования для LIKE: в SQLite по умолчанию его нет, ``_`` и ``%`` — подстановочные.
+_LIKE_ESCAPE: Final[str] = "\\"
+
+
+def _like_prefix_pattern(prefix: str) -> str:
+    """Шаблон LIKE «строка начинается с prefix»: спецсимволы LIKE в prefix — обычные символы."""
+    escaped = (
+        prefix.replace(_LIKE_ESCAPE, _LIKE_ESCAPE * 2)
+        .replace("%", _LIKE_ESCAPE + "%")
+        .replace("_", _LIKE_ESCAPE + "_")
+    )
+    return f"{escaped}%"
+
+
 def _source_filter_sql(table_alias: str, exclude_prefixes: tuple[str, ...]) -> tuple[str, list[str]]:
-    """Фрагмент ``AND (...)`` для фильтрации ``source`` (префиксы, регистрозависимо как в SQL LIKE)."""
+    """
+    Фрагмент ``AND (...)`` для фильтрации ``source`` по префиксам.
+
+    Префикс сравнивается буквально (``smoke_`` не задевает ``smokehouse``); регистр — как у
+    SQLite LIKE для ASCII (без учёта регистра).
+    """
     if not exclude_prefixes:
         return "", []
     col = f"{table_alias}.source"
-    parts = [f"COALESCE({col}, '') NOT LIKE ?" for _ in exclude_prefixes]
-    return " AND (" + " AND ".join(parts) + ")", [f"{p}%" for p in exclude_prefixes]
+    parts = [f"COALESCE({col}, '') NOT LIKE ? ESCAPE '{_LIKE_ESCAPE}'" for _ in exclude_prefixes]
+    return " AND (" + " AND ".join(parts) + ")", [_like_prefix_pattern(p) for p in exclude_prefixes]
 
 
 def count_total_reviews(

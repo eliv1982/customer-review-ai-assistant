@@ -64,6 +64,16 @@ REQUIRED_COLUMNS: tuple[str, ...] = (
 
 
 
+# Допустимая оценка клиента (пустое значение — оценки нет, NULL).
+
+RATING_MIN: int = 1
+
+RATING_MAX: int = 5
+
+
+
+
+
 class CsvImportError(Exception):
 
     """Ошибка формата CSV или обязательных колонок."""
@@ -110,11 +120,18 @@ def _parse_rating(value: str | None) -> int | None:
 
     try:
 
-        return int(s)
+        rating = int(s)
 
     except ValueError as e:
 
         raise ValueError(f"Некорректный rating: {value!r}") from e
+
+    # Шкала 1–5: иной балл исказил бы средний рейтинг в отчёте, строка считается ошибочной.
+    if not RATING_MIN <= rating <= RATING_MAX:
+
+        raise ValueError(f"rating вне диапазона {RATING_MIN}–{RATING_MAX}: {value!r}")
+
+    return rating
 
 
 

@@ -38,3 +38,5 @@ ERROR_PIPELINE = (
 ERROR_EMPTY_TEXT = "Пришлите непустой текст отзыва."
 
 UNKNOWN_COMMAND = "Такой команды нет. Список: /help"
+
+ACCESS_DENIED = "Доступ к этому боту ограничен."

@@ -1,0 +1,4 @@
+# Зависимости для разработки и CI: runtime + тесты.
+#   python -m pip install -r requirements-dev.txt
+-r requirements.txt
+pytest==9.0.3
